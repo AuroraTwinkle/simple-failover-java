@@ -400,6 +400,7 @@ public class PriorityFailoverBuilder<T> {
         private boolean startCheckTaskImmediately;
 
         private int aliasMethodThreshold = 10;
+        private double panicModeHealthyRateThreshold = 0;
 
         @Override
         @SuppressWarnings("unchecked")
@@ -506,6 +507,17 @@ public class PriorityFailoverBuilder<T> {
 
         public void setAliasMethodThreshold(int aliasMethodThreshold) {
             this.aliasMethodThreshold = aliasMethodThreshold;
+        }
+
+        public double getPanicModeHealthyRateThreshold() {
+            return panicModeHealthyRateThreshold;
+        }
+
+        public void setPanicModeHealthyRateThreshold(double panicModeHealthyRateThreshold) {
+            if(panicModeHealthyRateThreshold < 0 || panicModeHealthyRateThreshold > 1){
+                throw new IllegalArgumentException("恐慌模式健康率阈值应介于[0, 1]之间");
+            }
+            this.panicModeHealthyRateThreshold = panicModeHealthyRateThreshold;
         }
     }
 }

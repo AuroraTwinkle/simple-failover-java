@@ -1,8 +1,13 @@
 package com.github.phantomthief.failover.impl;
 
-import static java.util.Arrays.stream;
-import static java.util.stream.Collectors.toMap;
+import com.github.phantomthief.failover.SimpleFailover;
+import com.github.phantomthief.failover.impl.PriorityFailoverBuilder.PriorityFailoverConfig;
+import com.github.phantomthief.failover.impl.PriorityFailoverBuilder.ResConfig;
+import com.github.phantomthief.failover.util.AliasMethod;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -14,14 +19,8 @@ import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
-
-import com.github.phantomthief.failover.SimpleFailover;
-import com.github.phantomthief.failover.impl.PriorityFailoverBuilder.PriorityFailoverConfig;
-import com.github.phantomthief.failover.impl.PriorityFailoverBuilder.ResConfig;
-import com.github.phantomthief.failover.util.AliasMethod;
+import static java.util.Arrays.stream;
+import static java.util.stream.Collectors.toMap;
 
 /**
  * SimpleFailover的实现，绝大部分场景下可以代替WeightFailover，性能和功能都要更强一些。
@@ -367,7 +366,9 @@ public class PriorityFailover<T> implements SimpleFailover<T>, AutoCloseable {
             return;
         }
         synchronized (config) {
-            resInfo.currentWeight = newWeight;
+            if (newWeight > currentWeight || priorityNotInPanicMode(config, priority, groups)) {
+                resInfo.currentWeight = newWeight;
+            }
             updateGroupHealthy(priority, groups);
         }
 
@@ -379,6 +380,20 @@ public class PriorityFailover<T> implements SimpleFailover<T>, AutoCloseable {
                 listener.onFail(maxWeight, minWeight, priority, currentWeight, newWeight, res);
             }
         }
+    }
+
+    /**
+     * 需要在 {@link #config}对象锁的保护下执行
+     */
+    private static <T> boolean priorityNotInPanicMode(PriorityFailoverConfig<T> config, int priority, GroupInfo<T>[] groups) {
+        for (GroupInfo<T> psi : groups) {
+            if (psi.priority == priority) {
+                if (psi.groupWeightInfo.healthyRate > config.getPanicModeHealthyRateThreshold()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     static <T> void updateGroupHealthy(int priority, GroupInfo<T>[] groups) {
@@ -410,7 +425,9 @@ public class PriorityFailover<T> implements SimpleFailover<T>, AutoCloseable {
         }
         double oldWeight = resInfo.currentWeight;
         synchronized (this.config) {
-            resInfo.currentWeight = resInfo.minWeight;
+            if (priorityNotInPanicMode(config, resInfo.priority, groups)) {
+                resInfo.currentWeight = resInfo.minWeight;
+            }
             updateGroupHealthy(resInfo.priority, groups);
         }
         WeightListener<T> listener = config.getWeightListener();
